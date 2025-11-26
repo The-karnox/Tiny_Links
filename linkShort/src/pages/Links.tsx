@@ -100,7 +100,7 @@ export default function LinksPage() {
                 {filtered.map((l) => (
                   <>
                     <tr key={l.id}>
-                      <td><a href={`${API_BASE}/${l.short_code}`} target="_blank" rel="noopener noreferrer">{l.short_code}</a></td>
+                      <td><a href={`${API_BASE}/api/r/${l.short_code}`} target="_blank" rel="noopener noreferrer">{l.short_code}</a></td>
                       <td title={l.target_url}>{truncate(l.target_url)}</td>
                       <td>{l.click_count}</td>
                       <td>{l.last_clicked ? new Date(l.last_clicked).toLocaleString() : '—'}</td>
@@ -114,7 +114,7 @@ export default function LinksPage() {
                       <tr className="stats-row">
                         <td colSpan={5}>
                           <div className="stats-panel">
-                            <div><strong>Short URL:</strong> <a href={`${API_BASE}/${stats.short_code}`} target="_blank" rel="noreferrer">{API_BASE}/{stats.short_code}</a></div>
+                            <div><strong>Short URL:</strong> <a href={`${API_BASE}/api/r/${stats.short_code}`} target="_blank" rel="noreferrer">{API_BASE}/api/r/{stats.short_code}</a></div>
                             <div><strong>Clicks:</strong> {stats.click_count}</div>
                             <div><strong>Last Clicked:</strong> {stats.last_clicked ? new Date(stats.last_clicked).toLocaleString() : '—'}</div>
                           </div>

@@ -31,29 +31,29 @@ async function request<T>(path: string, opts?: RequestInit): Promise<T> {
 }
 
 export async function createLink(body: LinkCreate): Promise<Link> {
-  return request<Link>('/links', { method: 'POST', body: JSON.stringify(body) });
+  return request<Link>('/api/links', { method: 'POST', body: JSON.stringify(body) });
 }
 
 export async function listLinks(): Promise<Link[]> {
-  return request<Link[]>('/links');
+  return request<Link[]>('/api/links');
 }
 
 export async function getLink(id: number): Promise<Link> {
-  return request<Link>(`/links/${id}`);
+  return request<Link>(`/api/links/${id}`);
 }
 
 export async function deleteLink(id: number): Promise<void> {
-  await request<void>(`/links/${id}`, { method: 'DELETE' });
+  await request<void>(`/api/links/${id}`, { method: 'DELETE' });
 }
 
 type Health = { status: string; uptime?: number; timestamp?: string; checks?: Record<string, string> };
 
 export async function getHealth(): Promise<Health> {
-  return request<Health>('/healthz');
+  return request<Health>('/api/healthz');
 }
 
 export async function getReady(): Promise<Health> {
-  return request<Health>('/ready');
+  return request<Health>('/api/ready');
 }
 
 export default { createLink, listLinks, getLink, deleteLink };
