@@ -1,15 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import Button from '../components/Button';
-import api, { API_BASE, getHealth, getReady } from '../api';
+import api, { API_BASE } from '../api';
 
 export default function Home() {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [health, setHealth] = useState<any | null>(null);
-  const [ready, setReady] = useState<any | null>(null);
-  const [healthLoading, setHealthLoading] = useState(false);
+  
 
   function validate(u: string) {
     try {
