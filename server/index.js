@@ -1,12 +1,19 @@
 const express = require('express');
 const cors = require('cors');
-require('dotenv').config();
+require('dotenv').config({ override: true });
 
 const app = express();
 const port = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// Dev-friendly request logger to help diagnose unexpected 4xx/5xx responses
+// (kept intentionally small and non-verbose). Remove or gate behind NODE_ENV in production.
+app.use((req, res, next) => {
+  console.log(new Date().toISOString(), req.method, req.originalUrl);
+  next();
+});
 
 // Use Postgres (Neon) when DATABASE_URL is provided, otherwise fallback to in-memory
 const { Pool } = require('pg');
@@ -180,6 +187,14 @@ app.get('/healthz', (req, res) => {
   });
 });
 
+// Also expose `/health` for clients that expect that route (avoid wildcard capture)
+app.get('/healthz', (req, res) => {
+  res.json({
+    status: 200,
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  });
+});
 // Readiness probe (checks DB connectivity if configured)
 app.get('/ready', async (req, res) => {
   const result = { status: 'ok', checks: {} };
@@ -332,36 +347,12 @@ async function handleDeleteLink(req, res) {
 app.delete('/links/:id', handleDeleteLink);
 app.delete('/api/links/:id', handleDeleteLink);
 
-// Liveness probe
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString(),
-  });
-});
+// (health/readiness routes are defined earlier to avoid wildcard route capture)
 
-// Readiness probe (checks DB connectivity if configured)
-app.get('/ready', async (req, res) => {
-  const result = { status: 'ok', checks: {} };
-  if (pool) {
-    try {
-      await pool.query('SELECT 1');
-      result.checks.db = 'ok';
-      return res.json(result);
-    } catch (err) {
-      console.error('Readiness DB check failed', err);
-      result.status = 'fail';
-      result.checks.db = 'error';
-      return res.status(503).json(result);
-    }
-  }
-
-  // If no DB configured, mark DB as not-configured but still ready
-  result.checks.db = 'not-configured';
-  return res.json(result);
-});
-
-app.listen(port, () => {
-  console.log(`Server listening on http://localhost:${port}`);
+// Bind to IPv6 any by default so the server accepts IPv6 (::1) and IPv4 (127.0.0.1)
+// Use HOST env var to override if necessary.
+const HOST = process.env.HOST || '::';
+app.listen(port, HOST, () => {
+  const displayHost = HOST === '::' || HOST === '0.0.0.0' ? 'localhost' : HOST;
+  console.log(`Server listening on http://${displayHost}:${port} (bind=${HOST})`);
 });

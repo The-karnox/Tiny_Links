@@ -2,7 +2,30 @@
 // so in development Vite's proxy forwards `/api/*` to the local backend and
 // in production the requests are relative to the same origin (/api/*).
 const envApi = import.meta.env.VITE_API_URL;
-export const API_BASE = typeof envApi !== 'undefined' && envApi !== '' ? envApi : '';
+// Normalize API base: use provided VITE_API_URL or empty string. Trim trailing slash.
+export const API_BASE = typeof envApi !== 'undefined' && envApi !== '' ? String(envApi).replace(/\/$/, '') : '';
+
+// Helper to build API paths so we never emit `//` accidentally.
+export function buildApiPath(path: string) {
+  if (!path.startsWith('/')) path = '/' + path;
+  if (API_BASE) return `${API_BASE}${path}`;
+  return path; // relative path (use dev proxy)
+}
+
+// Build the public redirect URL shown to users.
+// If `API_BASE` is set (frontend points directly at backend), prefer the short root URL
+// (e.g. `http://localhost:3000/<code>`) so the link looks clean. Otherwise fall back to
+// the proxy-safe `/api/r/<code>` which the dev proxy rewrites to the backend redirect handler.
+export function buildRedirectUrl(shortCode: string) {
+  if (!shortCode) return '';
+  if (API_BASE) {
+    // API_BASE already trimmed of trailing slash; produce BASE/<code>
+    return `${API_BASE}/${shortCode}`;
+  }
+  // Use `/api/<code>` when relying on the dev proxy so the Vite proxy
+  // rewrites `/api/<code>` to `/<code>` on the backend (root redirect handler).
+  return buildApiPath(`/api/${shortCode}`);
+}
 
 type LinkCreate = { target_url: string };
 type Link = { id: number; short_code: string; target_url: string; click_count: number; last_clicked: string | null; existing?: boolean };

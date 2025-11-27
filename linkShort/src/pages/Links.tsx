@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, Fragment } from 'react';
-import api, { API_BASE } from '../api';
+import api, { API_BASE, buildApiPath, buildRedirectUrl } from '../api';
 import Button from '../components/Button';
 import { useNavigate } from 'react-router-dom';
 
@@ -124,7 +124,7 @@ export default function LinksPage() {
                     <tr>
                       <td>
                         <a
-                          href={`${API_BASE}/api/r/${l.short_code}`}
+                          href={buildRedirectUrl(l.short_code)}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={() => refreshAfterClick(l.id)}
@@ -148,12 +148,12 @@ export default function LinksPage() {
                             <div>
                               <strong>Short URL:</strong>{' '}
                               <a
-                                href={`${API_BASE}/api/r/${stats.short_code}`}
+                                href={buildRedirectUrl(stats.short_code)}
                                 target="_blank"
                                 rel="noreferrer"
                                 onClick={() => refreshAfterClick(stats.id)}
                               >
-                                {API_BASE}/api/r/{stats.short_code}
+                                {buildRedirectUrl(stats.short_code)}
                               </a>
                             </div>
                             <div><strong>Clicks:</strong> {stats.click_count}</div>

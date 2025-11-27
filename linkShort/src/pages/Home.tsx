@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import Button from '../components/Button';
-import api, { API_BASE } from '../api';
+import api, { API_BASE, buildApiPath, buildRedirectUrl } from '../api';
 
 export default function Home() {
   const [url, setUrl] = useState('');
@@ -33,10 +33,10 @@ export default function Home() {
       const created = await api.createLink({ target_url: url });
       // If server indicates the URL already exists, show a clear message instead
       if ((created as any).existing) {
-        setError(`Short link already exists: ${API_BASE}/api/r/${created.short_code}`);
+        setError(`Short link already exists: ${buildRedirectUrl(created.short_code)}`);
       } else {
         // Show the backend redirect URL so clicks go to the server (which will redirect)
-        setSuccess(`${API_BASE}/api/r/${created.short_code}`);
+        setSuccess(buildRedirectUrl(created.short_code));
         setUrl('');
       }
     } catch (err: any) {
