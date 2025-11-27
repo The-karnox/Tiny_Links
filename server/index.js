@@ -41,7 +41,8 @@ app.post('/api/shorten', (req, res) => {
 });
 
 // Compatibility endpoints expected by the frontend
-app.post('/links', async (req, res) => {
+// Shared handler: create a short link
+async function handleCreateLink(req, res) {
   const { target_url, url, original } = req.body;
   const incoming = target_url || url || original;
   if (!incoming) return res.status(400).json({ error: 'target_url is required' });
@@ -54,14 +55,12 @@ app.post('/links', async (req, res) => {
     try {
       const existing = await pool.query('SELECT id, short_code, target_url, click_count, last_clicked FROM links WHERE target_url = $1 LIMIT 1', [incoming]);
       if (existing.rows.length > 0) {
-        // return existing record and indicate it already existed
         const row = existing.rows[0];
         row.existing = true;
         return res.status(409).json({ error: 'already_exists', ...row });
       }
     } catch (err) {
       console.error('Error checking existing link in DB', { err, incoming });
-      // continue to attempt insertion below
     }
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -73,12 +72,10 @@ app.post('/links', async (req, res) => {
         );
         return res.status(201).json(result.rows[0]);
       } catch (err) {
-        // Unique violation: try again
         if (err && err.code === '23505' && attempt < MAX_ATTEMPTS) {
           console.warn(`short_code collision on attempt ${attempt}, retrying...`);
           continue;
         }
-        // Log DB error details for debugging
         console.error('Error inserting link into DB', { attempt, err, incoming });
         return res.status(500).json({ error: 'Database error while creating link' });
       }
@@ -87,11 +84,10 @@ app.post('/links', async (req, res) => {
     return res.status(500).json({ error: 'Could not generate a unique short link. Please try again.' });
   }
 
-  // fallback: in-memory, ensure uniqueness by regenerating as needed
-  // in-memory: check for existing target_url
+  // fallback: in-memory
   const foundExisting = Array.from(links.values()).find((r) => r.target_url === incoming);
   if (foundExisting) {
-    return res.status(409).json({ error: 'already_exists error (409)', ...foundExisting, existing: true });
+    return res.status(409).json({ error: 'already_exists', ...foundExisting, existing: true });
   }
 
   let shortId = generateShortId();
@@ -112,7 +108,10 @@ app.post('/links', async (req, res) => {
   };
   links.set(shortId, record);
   res.status(201).json(record);
-});
+}
+
+app.post('/links', handleCreateLink);
+app.post('/api/links', handleCreateLink);
 
 app.get('/links', async (req, res) => {
   if (pool) {
@@ -128,9 +127,28 @@ app.get('/links', async (req, res) => {
   const all = Array.from(links.values());
   res.json(all);
 });
+// Shared handler: list links
+async function handleListLinks(req, res) {
+  if (pool) {
+    try {
+      const result = await pool.query('SELECT id, short_code, target_url, click_count, last_clicked FROM links ORDER BY id DESC');
+      return res.json(result.rows);
+    } catch (err) {
+      console.error('Error fetching links from DB', err);
+      return res.status(500).json({ error: 'database error' });
+    }
+  }
+
+  const all = Array.from(links.values());
+  res.json(all);
+}
+
+app.get('/links', handleListLinks);
+app.get('/api/links', handleListLinks);
 
 // Get a single link by id
-app.get('/links/:id', async (req, res) => {
+// Get a single link by id
+async function handleGetLink(req, res) {
   const id = Number(req.params.id);
   if (!id) return res.status(400).json({ error: 'invalid id' });
 
@@ -148,7 +166,10 @@ app.get('/links/:id', async (req, res) => {
   const found = Array.from(links.values()).find((r) => r.id === id);
   if (!found) return res.status(404).json({ error: 'not found' });
   return res.json(found);
-});
+}
+
+app.get('/links/:id', handleGetLink);
+app.get('/api/links/:id', handleGetLink);
 
 // Liveness probe
 app.get('/healthz', (req, res) => {
@@ -193,7 +214,11 @@ app.get('/:short_code', async (req, res) => {
       // update stats
       await pool.query('UPDATE links SET click_count = click_count + 1, last_clicked = NOW() WHERE id = $1', [row.id]);
 
-      return res.redirect(row.target_url);
+      // ensure we redirect to an absolute URL (add protocol if missing)
+      let dest = row.target_url;
+      if (!/^https?:\/\//i.test(dest)) dest = `https://${dest}`;
+      console.log('Redirecting to', dest);
+      return res.redirect(dest);
     } catch (err) {
       console.error('DB error on redirect', err);
       return res.status(500).send('server error');
@@ -210,12 +235,81 @@ app.get('/:short_code', async (req, res) => {
   record.last_clicked = new Date().toISOString();
   links.set(short_code, record);
 
-  // redirect to target
-  return res.redirect(record.target_url);
+  // ensure we redirect to an absolute URL (add protocol if missing)
+  let dest = record.target_url;
+  if (!/^https?:\/\//i.test(dest)) dest = `https://${dest}`;
+  console.log('Redirecting to', dest);
+  return res.redirect(dest);
+});
+
+// Fallback redirect route for requests to /api/r/:short_code (works with dev proxy or direct calls)
+app.get('/api/r/:short_code', async (req, res) => {
+  const { short_code } = req.params;
+  console.log('Fallback redirect hit for short_code=', short_code);
+
+  if (pool) {
+    try {
+      const find = await pool.query('SELECT id, short_code, target_url, click_count, last_clicked FROM links WHERE short_code = $1', [short_code]);
+      const row = find.rows[0];
+      if (!row) return res.status(404).send('Not found');
+
+      // update stats
+      await pool.query('UPDATE links SET click_count = click_count + 1, last_clicked = NOW() WHERE id = $1', [row.id]);
+
+      // ensure we redirect to an absolute URL (add protocol if missing)
+      let dest = row.target_url;
+      if (!/^https?:\/\//i.test(dest)) dest = `https://${dest}`;
+      console.log('Redirecting to', dest);
+      return res.redirect(dest);
+    } catch (err) {
+      console.error('DB error on fallback redirect', err);
+      return res.status(500).send('server error');
+    }
+  }
+
+  const record = links.get(short_code);
+  if (!record) {
+    return res.status(404).send('Not found');
+  }
+
+  // update stats
+  record.click_count = (record.click_count || 0) + 1;
+  record.last_clicked = new Date().toISOString();
+  links.set(short_code, record);
+
+  // ensure we redirect to an absolute URL (add protocol if missing)
+  let dest = record.target_url;
+  if (!/^https?:\/\//i.test(dest)) dest = `https://${dest}`;
+  console.log('Redirecting to', dest);
+  return res.redirect(dest);
+});
+
+// Debug endpoint: show the computed redirect destination without redirecting
+app.get('/debug/r/:short_code', async (req, res) => {
+  const { short_code } = req.params;
+  try {
+    if (pool) {
+      const result = await pool.query('SELECT id, short_code, target_url, click_count, last_clicked FROM links WHERE short_code = $1', [short_code]);
+      const row = result.rows[0];
+      if (!row) return res.status(404).json({ error: 'not found' });
+      let dest = row.target_url;
+      if (!/^https?:\/\//i.test(dest)) dest = `https://${dest}`;
+      return res.json({ short_code: row.short_code, target_url: row.target_url, computed_dest: dest, click_count: row.click_count, last_clicked: row.last_clicked });
+    }
+
+    const record = links.get(short_code);
+    if (!record) return res.status(404).json({ error: 'not found' });
+    let dest = record.target_url;
+    if (!/^https?:\/\//i.test(dest)) dest = `https://${dest}`;
+    return res.json({ short_code: record.short_code, target_url: record.target_url, computed_dest: dest, click_count: record.click_count, last_clicked: record.last_clicked });
+  } catch (err) {
+    console.error('Error in debug endpoint', err);
+    return res.status(500).json({ error: 'server error' });
+  }
 });
 
 // Delete a link by id
-app.delete('/links/:id', async (req, res) => {
+async function handleDeleteLink(req, res) {
   const id = Number(req.params.id);
   if (!id) return res.status(400).json({ error: 'invalid id' });
 
@@ -229,12 +323,14 @@ app.delete('/links/:id', async (req, res) => {
     }
   }
 
-  // fallback in-memory: find by id and delete
   const found = Array.from(links.values()).find((r) => r.id === id);
   if (!found) return res.status(404).json({ error: 'not found' });
   links.delete(found.short_code);
   return res.status(204).send();
-});
+}
+
+app.delete('/links/:id', handleDeleteLink);
+app.delete('/api/links/:id', handleDeleteLink);
 
 // Liveness probe
 app.get('/health', (req, res) => {

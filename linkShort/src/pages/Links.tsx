@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, Fragment } from 'react';
 import api, { API_BASE } from '../api';
 import Button from '../components/Button';
 import { useNavigate } from 'react-router-dom';
@@ -58,6 +58,28 @@ export default function LinksPage() {
     }
   }
 
+  // After a user clicks a link (which opens in a new tab), refresh the list
+  // and the stats for that item shortly afterwards so the UI shows updated
+  // click counts / last-clicked without requiring a full page reload.
+  async function refreshAfterClick(id: number) {
+    // fire-and-forget with a small delay to allow the server to process the
+    // redirect request and update counters.
+    setTimeout(async () => {
+      try {
+        const data = await api.listLinks();
+        setLinks(data);
+        if (selectedStatsId === id) {
+          const s = await api.getLink(id);
+          setStats(s);
+        }
+      } catch (e: any) {
+        // non-fatal — keep UI responsive
+        // eslint-disable-next-line no-console
+        console.warn('Could not refresh links after click', e?.message || e);
+      }
+    }, 600);
+  }
+
   async function handleShowStats(id: number) {
     // toggle
     if (selectedStatsId === id) {
@@ -98,9 +120,18 @@ export default function LinksPage() {
               </thead>
               <tbody>
                 {filtered.map((l) => (
-                  <>
-                    <tr key={l.id}>
-                      <td><a href={`${API_BASE}/api/r/${l.short_code}`} target="_blank" rel="noopener noreferrer">{l.short_code}</a></td>
+                  <Fragment key={l.id}>
+                    <tr>
+                      <td>
+                        <a
+                          href={`${API_BASE}/api/r/${l.short_code}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => refreshAfterClick(l.id)}
+                        >
+                          {l.short_code}
+                        </a>
+                      </td>
                       <td title={l.target_url}>{truncate(l.target_url)}</td>
                       <td>{l.click_count}</td>
                       <td>{l.last_clicked ? new Date(l.last_clicked).toLocaleString() : '—'}</td>
@@ -114,14 +145,24 @@ export default function LinksPage() {
                       <tr className="stats-row">
                         <td colSpan={5}>
                           <div className="stats-panel">
-                            <div><strong>Short URL:</strong> <a href={`${API_BASE}/api/r/${stats.short_code}`} target="_blank" rel="noreferrer">{API_BASE}/api/r/{stats.short_code}</a></div>
+                            <div>
+                              <strong>Short URL:</strong>{' '}
+                              <a
+                                href={`${API_BASE}/api/r/${stats.short_code}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={() => refreshAfterClick(stats.id)}
+                              >
+                                {API_BASE}/api/r/{stats.short_code}
+                              </a>
+                            </div>
                             <div><strong>Clicks:</strong> {stats.click_count}</div>
                             <div><strong>Last Clicked:</strong> {stats.last_clicked ? new Date(stats.last_clicked).toLocaleString() : '—'}</div>
                           </div>
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </tbody>
             </table>

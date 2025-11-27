@@ -1,7 +1,8 @@
-// Use VITE_API_URL when provided. In production (Vercel) you can set it to an empty string
-// to make requests relative to the same origin (e.g. `/api/links`). In dev fallback to localhost.
+// Use VITE_API_URL when provided. Otherwise default to relative paths (''),
+// so in development Vite's proxy forwards `/api/*` to the local backend and
+// in production the requests are relative to the same origin (/api/*).
 const envApi = import.meta.env.VITE_API_URL;
-export const API_BASE = typeof envApi !== 'undefined' ? envApi : (import.meta.env.DEV ? 'http://localhost:3000' : '');
+export const API_BASE = typeof envApi !== 'undefined' && envApi !== '' ? envApi : '';
 
 type LinkCreate = { target_url: string };
 type Link = { id: number; short_code: string; target_url: string; click_count: number; last_clicked: string | null; existing?: boolean };
